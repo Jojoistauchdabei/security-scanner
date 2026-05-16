@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.models import FeedVersion, ThreatEntry
+from app.models import CVEEntry, FeedVersion, ThreatEntry
 
 
 class HashDatabase:
@@ -62,9 +62,9 @@ class HashDatabase:
 
     def seed_example_data(self) -> None:
         eicar = ThreatEntry(
-            sha256="275a021bbfb6489e54d471899f7db9d1e273e3bb08cc1573677ee9f4963901f1",
-            md5="44d88612fea8a8f36de82e1278abb02f",
-            sha1="3395856ce81f2b7382dee72602f798b642f14140",
+            sha256="c7611eb6156380f67d0b326c3ac42a61ac60fff1496eeabbcd92609a18d08d10",
+            md5="866a53583cacbbbd60c8f4c9e91a7d43",
+            sha1="fb3e14bebcfdcea6f154f065bc558dd0f3ffb1b2",
             tlsh=None,
             source="example-seed",
             threat_type="test-file",
@@ -75,9 +75,9 @@ class HashDatabase:
             related_cves=[],
         )
         safe = ThreatEntry(
-            sha256="",
-            md5="",
-            sha1="",
+            sha256="ca6c268f035e4d29ec54b1967b15c6f7e9301b28fb49b1e2f761387aaad41b62",
+            md5="a0ef1ae3706677ec96ea043caea29c56",
+            sha1="4c3b8788419c2016f465e4f8527fac1532b310a4",
             tlsh=None,
             source="example-safe",
             threat_type="baseline",
@@ -91,8 +91,7 @@ class HashDatabase:
         with self.connect() as con:
             con.execute("DELETE FROM threat_entries WHERE source IN ('example-seed', 'example-safe')")
             self.upsert_threat_entries([eicar], is_safe=False, con=con)
-            if safe.sha256 or safe.md5 or safe.sha1:
-                self.upsert_threat_entries([safe], is_safe=True, con=con)
+            self.upsert_threat_entries([safe], is_safe=True, con=con)
 
     def upsert_threat_entries(
         self,
@@ -160,6 +159,31 @@ class HashDatabase:
         with self.connect() as con:
             row = con.execute("SELECT version FROM feed_versions WHERE source = ?", (source,)).fetchone()
             return row["version"] if row else None
+
+    def upsert_cve_entries(self, entries: list[CVEEntry]) -> int:
+        if not entries:
+            return 0
+        with self.connect() as con:
+            for entry in entries:
+                con.execute(
+                    """
+                    INSERT INTO cve_entries (cve_id, cvss, affected_software, affected_versions, references_json)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(cve_id) DO UPDATE SET
+                        cvss = excluded.cvss,
+                        affected_software = excluded.affected_software,
+                        affected_versions = excluded.affected_versions,
+                        references_json = excluded.references_json
+                    """,
+                    (
+                        entry.cve_id,
+                        entry.cvss,
+                        entry.affected_software,
+                        entry.affected_versions,
+                        json.dumps(entry.references),
+                    ),
+                )
+        return len(entries)
 
     def lookup_hashes(self, sha256: str, md5: str, sha1: str) -> dict[str, list[sqlite3.Row]]:
         with self.connect() as con:

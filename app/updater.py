@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 
 from app.database import HashDatabase
@@ -33,10 +34,13 @@ class FeedUpdater:
                     continue
 
                 threat_entries = feed.parse_threat_entries(payload if isinstance(payload, dict) else {"data": payload})
+                cve_entries = feed.parse_cve_entries(payload if isinstance(payload, dict) else {"data": payload})
                 inserted = self.db.upsert_threat_entries(threat_entries, is_safe=False)
+                self.db.upsert_cve_entries(cve_entries)
                 self.db.set_feed_version(version)
                 stats[feed.source] = inserted
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Feed update failed for %s: %s", feed.source, exc)
                 stats[feed.source] = 0
+            time.sleep(feed.rate_limit_seconds)
         return stats
