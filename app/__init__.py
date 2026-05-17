@@ -1,0 +1,1 @@
+"""Security scanner application package."""
